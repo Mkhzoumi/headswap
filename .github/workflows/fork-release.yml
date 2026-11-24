@@ -1,0 +1,212 @@
+# Builds, signs and publishes Headswap releases for this fork. Phones with a fork build find them
+# through the in-app updater (UpdateLogic.REPO must point at this repo).
+#
+# - Every day: if the developer published a new release, merge its tag into my-changes and publish
+#   it here as v<version>-fork (for example v4.3.1-fork).
+# - By hand (Actions -> Fork release -> Run workflow): publish your own changes from my-changes as
+#   <current version>.N, for example 4.3.0.1.
+#
+# versionCode = the developer's versionCode * 100 + N, so the developer's next release is always
+# newer than your own releases in between (the updater only installs a higher versionCode).
+#
+# Secrets: HEADSWAP_KEYSTORE_B64 (headswap-release.jks as base64), HEADSWAP_KEYSTORE_PASSWORD.
+name: Fork release
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Your own release: current version + .N, e.g. 4.3.0.1. Leave empty to follow the developer's latest release."
+        required: false
+        default: ""
+      notes:
+        description: "What changed (the phone shows this before updating)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+
+env:
+  UPSTREAM: YegorkaPomidorka/headswap
+  BRANCH: my-changes
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: my-changes
+          fetch-depth: 0
+
+      - name: Decide what to release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_VERSION" ]; then
+            ver="$INPUT_VERSION"
+            upstream_tag=""
+          else
+            upstream_tag=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+            ver="${upstream_tag#v}"
+          fi
+          if gh release view "v$ver-fork" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$ver-fork is already released here, nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "upstream_tag=$upstream_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Merge the developer's release into my-changes
+        if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.upstream_tag != ''
+        env:
+          TAG: ${{ steps.plan.outputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags "https://github.com/$UPSTREAM.git" "refs/tags/$TAG"
+          if ! git merge --no-edit -m "Merge upstream release $TAG" "$(git rev-parse 'FETCH_HEAD^{commit}')"; then
+            git merge --abort
+            echo "::error::$TAG conflicts with your changes on $BRANCH. Merge it on your PC, push, then run this workflow again."
+            exit 1
+          fi
+          git push origin "HEAD:$BRANCH"
+
+      - name: Set version name and code
+        if: steps.plan.outputs.skip == 'false'
+        id: version
+        env:
+          VER: ${{ steps.plan.outputs.version }}
+          OWN: ${{ steps.plan.outputs.upstream_tag == '' }}
+        run: |
+          set -euo pipefail
+          gradle=android/app/build.gradle.kts
+          base_name=$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' "$gradle")
+          base_code=$(sed -nE 's/^\s*versionCode = ([0-9]+).*/\1/p' "$gradle")
+          if [ "$OWN" = "true" ]; then
+            n="${VER##*.}"
+            if [ "${VER%.*}" != "$base_name" ] || ! [[ "$n" =~ ^[1-9][0-9]?$ ]]; then
+              echo "::error::Own release must be $base_name.N with N from 1 to 99 (for example $base_name.1), got '$VER'"
+              exit 1
+            fi
+          else
+            n=0
+            if [ "$VER" != "$base_name" ]; then
+              echo "::error::my-changes says versionName $base_name but the release is $VER"
+              exit 1
+            fi
+          fi
+          name="$VER-fork"
+          code=$((base_code * 100 + 10#$n))
+          sed -i -E "s/^(\s*versionName = )\"[^\"]*\"/\1\"$name\"/; s/^(\s*versionCode = )[0-9]+/\1$code/" "$gradle"
+          grep -nE '^\s*version(Name|Code) = ' "$gradle"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Check the updater points at this fork
+        if: steps.plan.outputs.skip == 'false'
+        run: |
+          grep -q "const val REPO = \"$GITHUB_REPOSITORY\"" android/app/src/main/java/com/yegorkapomidorka/headswap/update/UpdateLogic.kt || {
+            echo "::error::UpdateLogic.REPO must be \"$GITHUB_REPOSITORY\", otherwise phones look for updates in the wrong repo"
+            exit 1
+          }
+
+      - name: Add the Android Auto head unit certificates
+        if: steps.plan.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          a=https://raw.githubusercontent.com/opencardev/aasdk/5e78ed720cf71c97814b803184bb0589429d3103/cert
+          h=https://raw.githubusercontent.com/andreknieriem/open-headunit/42fcd3895781d1ea95e29e25ed361b79917584e6/app/src/main/res/raw
+          d=android/app/src/main/assets/aa
+          mkdir -p "$d/jvc" "$d/hur"
+          curl -sfL "$a/headunit.crt" -o "$d/jvc/cert.pem"
+          curl -sfL "$a/headunit.key" -o "$d/jvc/key.pem"
+          curl -sfL "$h/cert" -o "$d/hur/cert.pem"
+          curl -sfL "$h/privkey" -o "$d/hur/key.pem"
+          sha256sum -c <<EOF
+          85b5043a09b1ba9464f745e6917bdbaa2bc582fe48cb727a7787c1a832a773e4  $d/jvc/cert.pem
+          9e837a172a1eef5b05cda9df9d086753639648a17f76c2c939bcbd094aa972f2  $d/jvc/key.pem
+          851d80c86bf469a3dd121b7a7084ca97b91b3d2cc72922c451e0156b455f38c1  $d/hur/cert.pem
+          015d172a6e4d5b7f04a5c820a60a41673f99d6e01c2f658e2a0909efbf6d49f7  $d/hur/key.pem
+          EOF
+
+      - name: Set up release signing
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          KEYSTORE_B64: ${{ secrets.HEADSWAP_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.HEADSWAP_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add the secrets HEADSWAP_KEYSTORE_B64 and HEADSWAP_KEYSTORE_PASSWORD (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/headswap-release.jks"
+          pw="${KEYSTORE_PASSWORD//\\/\\\\}"
+          mkdir -p ~/.android-keys
+          {
+            echo "storeFile=$RUNNER_TEMP/headswap-release.jks"
+            echo "keyAlias=headswap"
+            echo "storePassword=$pw"
+            echo "keyPassword=$pw"
+          } > ~/.android-keys/headswap-release.properties
+
+      - uses: actions/setup-java@v5
+        if: steps.plan.outputs.skip == 'false'
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build the signed APK
+        if: steps.plan.outputs.skip == 'false'
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Check the APK
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          grep -vE '^\s*(#|$)' release/required_assets.txt | tr -d '\r' | while read -r f; do
+            unzip -l "$apk" "assets/$f" >/dev/null || { echo "::error::assets/$f is missing from the APK"; exit 1; }
+          done
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$bt/apksigner" verify --print-certs "$apk" | grep -i 'SHA-256'
+          cp "$apk" "headswap-$NAME.apk"
+
+      - name: Publish the release
+        if: steps.plan.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.version.outputs.name }}
+          TAG: ${{ steps.plan.outputs.upstream_tag }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TAG" ]; then
+            {
+              echo "Fork build of the developer's release [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG)."
+              echo
+              gh api "repos/$UPSTREAM/releases/tags/$TAG" --jq .body
+            } > notes.md
+          else
+            echo "${NOTES:-Own changes from $BRANCH at $(git rev-parse --short HEAD).}" > notes.md
+          fi
+          gh release create "v$NAME" "headswap-$NAME.apk" --repo "$GITHUB_REPOSITORY" \
+            --target "$(git rev-parse HEAD)" --title "Headswap $NAME" --notes-file notes.md --latest
