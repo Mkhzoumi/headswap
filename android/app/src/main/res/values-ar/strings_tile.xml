@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tile_off">متوقف · اضغط للاتصال عبر Wi-Fi</string>
+    <string name="tile_off_plain">متوقف</string>
+    <string name="tile_waiting">بانتظار السيارة…</string>
+    <string name="tile_connected_usb">متصل · USB</string>
+    <string name="tile_connected_wifi">متصل · Wi-Fi</string>
+</resources>

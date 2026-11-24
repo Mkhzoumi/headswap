@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tile_off">已关闭 · 点按通过 Wi-Fi 连接</string>
+    <string name="tile_off_plain">已关闭</string>
+    <string name="tile_waiting">正在等待车机…</string>
+    <string name="tile_connected_usb">已连接 · USB</string>
+    <string name="tile_connected_wifi">已连接 · Wi-Fi</string>
+</resources>

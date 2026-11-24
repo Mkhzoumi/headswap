@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tile_off">Désactivé · touchez pour le Wi-Fi</string>
+    <string name="tile_off_plain">Désactivé</string>
+    <string name="tile_waiting">En attente de la voiture…</string>
+    <string name="tile_connected_usb">Connecté · USB</string>
+    <string name="tile_connected_wifi">Connecté · Wi-Fi</string>
+</resources>

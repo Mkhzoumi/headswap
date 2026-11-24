@@ -43,7 +43,8 @@ into main) and «Release» do not apply here.
   automatic release until it is resolved on the PC. Prefer new files and small hooks. Big features are better offered to
   the developer.
 - Fork-only changes so far: `UpdateLogic.REPO` (+ `UpdateLogicTest`), the release workflow, the English docs
-  (`docs/en/`, this file).
+  (`docs/en/`, this file, the `stand` skill), the Quick Settings tile (`tile/`, `strings_tile.xml`, one block at the
+  end of `AndroidManifest.xml`).
 - Never commit certificates, keys, passwords or users' logs. AA certificates (`android/app/src/main/assets/aa/`) are
   git-ignored; the signing key lives in `~/.android-keys/` and in the repo's Actions secrets.
 - A decision specific to the fork (a non-obvious choice, an approach rejected after testing) gets a short record in

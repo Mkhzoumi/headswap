@@ -216,5 +216,30 @@
             android:name=".dex.DelegatedDesktopService"
             android:exported="false"
             android:process=":delegated" />
+
+        <!-- fork: Quick Settings tile (tile/HeadswapTileService) - status, start wireless, stop; only the system can bind it -->
+        <service
+            android:name=".tile.HeadswapTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_headswap"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+
+        <!-- fork: long press on the tile opens Headswap -->
+        <activity-alias
+            android:name=".tile.TilePreferences"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+        </activity-alias>
     </application>
 </manifest>

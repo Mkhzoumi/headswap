@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fork: Quick Settings tile (tile/HeadswapTileService). Edit all five languages together. -->
+<resources>
+    <string name="tile_label" translatable="false">Headswap</string>
+    <string name="tile_off">Off · tap for Wi-Fi</string>
+    <string name="tile_off_plain">Off</string>
+    <string name="tile_waiting">Waiting for the car…</string>
+    <string name="tile_connected_usb">Connected · USB</string>
+    <string name="tile_connected_wifi">Connected · Wi-Fi</string>
+</resources>

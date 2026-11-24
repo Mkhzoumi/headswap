@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tile_off">Выключено · нажмите для Wi-Fi</string>
+    <string name="tile_off_plain">Выключено</string>
+    <string name="tile_waiting">Жду машину…</string>
+    <string name="tile_connected_usb">Подключено · USB</string>
+    <string name="tile_connected_wifi">Подключено · Wi-Fi</string>
+</resources>
